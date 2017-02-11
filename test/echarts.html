@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+
+    <title>echarts学习</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0
+        }
+
+        .bar {
+            width: 800px;
+            height: 400px;
+            margin: 100px auto;
+        }
+    </style>
+</head>
+<body>
+<div class="bar" id="bar4"></div>
+<script type="text/javascript" src="../lib/jquery-3.1.1.min.js"></script>
+<script type="text/javascript" src="../lib/echarts.min.js"></script>
+<script type="text/javascript">
+    //分箱函数
+    //参数一：列的序列号col_num
+    //参数二：分箱数目box_num
+    (function drawBox(col_num, box_num) {
+        var col_arr = [],
+                coord = [],
+                mark_x = [],
+                min_x,
+                max_x
+                ;
+
+        $.get('../data/test.json', function (data) {
+            var myEcharts = echarts.init(document.getElementById('bar'+col_num));
+            var mark_line = {
+                animation: false,
+                symbol: 'none',
+                lineStyle: {
+                    normal: {
+                        type: 'solid',
+                        color: 'black'
+                    }
+                },
+                data: []
+            };
+            var mark_area = {
+                data: []
+            };
+            var option;
+            //取出所选列的数据
+            for (var i = 1; i < data.length; i++) {
+                var item = data[i][col_num];
+                col_arr.push(item);
+            }
+            min_x = Math.min.apply(null, col_arr);
+            max_x = Math.max.apply(null, col_arr);
+            //计算markLine的初始化坐标
+            for(var p=1;p<box_num;p++){
+                var mark_x_tpl = parseFloat(((max_x-min_x)*p/box_num+min_x).toFixed(2));
+                mark_x.push(mark_x_tpl);
+                mark_line.data.push({xAxis: mark_x_tpl});
+            }
+            //计算markArea的初始值
+            for(var q=0;q<box_num;q++){
+                var tmp = [{
+                    name: (mark_x[q-1] || min_x) + '到' + (mark_x[q] || max_x),
+                    xAxis: (mark_x[q-1] || min_x)
+                }, {xAxis: (mark_x[q] || max_x)}];
+                if(q%2 != 0){
+                    tmp[0].itemStyle = {
+                        normal:{
+                            color: '#ddd'
+                        }
+                    }
+                }
+                mark_area.data.push(tmp);
+            }
+//            console.log('mark_line.data',mark_line.data);
+            //计算x中每一项在x中出现的次数
+            for (var j in col_arr) {
+                var counter = 0;
+                for (var k in col_arr) {
+                    if (col_arr[j] === col_arr[k]) {
+                        counter++;
+                    }
+                }
+                coord[j] = [col_arr[j], counter];
+            }
+            
+            option = {
+                title: {
+                    show: false,
+                    text: '直方图示例',         //标题
+                    subtext: 'echarts学习',    //副标题
+                    left: 100           //可以是数值，也可以是center,left,right
+                    //            borderColor: 'red',
+                    //            borderWidth: 5
+                },
+                toolbox: {
+                    show: true,
+                    itemSize: 20,
+                    right: 100,
+                    feature: {
+                        dataView: {
+                            show: true
+                        },
+                        restore: {
+                            show: true
+                        },
+                        magicType: {
+                            show: true,
+                            type: ['line', 'bar']
+                        }
+                    }
+                },
+                tooltip: {
+                    trigger: 'xAxis'  //item为数据项触发,xAxis为x轴触发
+                },
+                grid: {
+                    left: 40,
+                    right: 40
+                },
+                legend: {
+                    data: [{
+                        name: '样本数',
+                        // 强制设置图形。
+                        icon: 'roundRect'
+                    }]
+                },
+                xAxis: {
+                    name: '数据',
+                    type: 'value',
+                    min: min_x,
+                    max: max_x
+                },
+                yAxis: {
+                    name: '样本数'
+                },
+                series: [
+                    {
+                        name: '样本数',
+                        type: 'bar',
+                        data: coord,
+                        markLine: mark_line,
+                        markArea: mark_area
+                    }
+                ]
+            };
+
+            myEcharts.setOption(option);
+            //鼠标移动时markLine跟着一起移动
+            //实现方法：鼠标距离浏览器左边界距离-图表距离左边距离，得到鼠标距离图表左边界距离
+            //markLine的(x-min)/(max-min)=鼠标距离图表左边距/图表宽度
+            myEcharts.on('mousedown', function (params) {
+                var $this = $(this);
+                //当点击的目标是markLine时做...
+                if (params.componentType === 'markLine') {
+//                console.log('params.dataIndex',params.dataIndex);
+                    var i = params.dataIndex;
+                    var area_min = mark_x[i - 1] || min_x;
+                    var area_max = mark_x[i + 1] || max_x;
+                    //移动鼠标时，刷新图表markLine的位置
+                    $(myEcharts.getDom()).on('mousemove', function (e) {
+                        $this = $(this);
+//                    console.log('mousemove');
+                        var x_zuobiao = parseFloat(((e.clientX - $this.offset().left - 40) * (max_x - min_x) / ($this.width() - 80) + min_x).toFixed(2));
+//                    console.log((e.clientX - $this.offset().left)*(max_x-min_x)/($this.width()));
+                        //控制鼠标的移动范围，防止markArea重叠
+                        if (x_zuobiao < area_min || x_zuobiao > area_max) {
+                            return;
+                        }
+                        //计算标线的位置
+                        option.series[0].markLine.data[i].xAxis = x_zuobiao;
+                        //计算标线左侧区域
+                        option.series[0].markArea.data[i][0].xAxis = area_min;
+                        option.series[0].markArea.data[i][0].name = area_min + '到' + x_zuobiao;
+                        option.series[0].markArea.data[i][1].xAxis = x_zuobiao;
+                        //右侧
+                        option.series[0].markArea.data[i + 1][0].xAxis = x_zuobiao;
+                        option.series[0].markArea.data[i + 1][0].name = x_zuobiao + '到' + area_max;
+                        option.series[0].markArea.data[i + 1][1].xAxis = area_max;
+                        myEcharts.setOption(option);
+                    });
+                    //松开鼠标按键时，更新mark_x中记录的markLine横坐标
+                    $(myEcharts.getDom()).on('mouseup', function (e) {
+//                    console.log('mouseup');
+                        mark_x[i] = parseFloat(((e.clientX - $this.offset().left - 40) * (max_x - min_x) / ($this.width() - 80) + min_x).toFixed(2));
+                        myEcharts.setOption(option);
+                        //解除事件绑定
+                        $(this).unbind();
+                    });
+                    //鼠标移出图标时，操作同mouseup
+                    $(myEcharts.getDom()).on('mouseout', function (e) {
+                        console.log('mouseout');
+                        mark_x[i] = parseFloat(((e.clientX - $this.offset().left - 40) * (max_x - min_x) / ($this.width() - 80) + min_x).toFixed(2));
+                        myEcharts.setOption(option);
+                        $(this).unbind();
+                    });
+                }
+            });
+        });
+    })(4, 3);
+</script>
+</body>
+</html>
